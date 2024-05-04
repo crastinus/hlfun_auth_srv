@@ -1,0 +1,16 @@
+[package]
+name = "hlfun_srv"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytes = "1.6.0"
+http = "1.1.0"
+http-body-util = "0.1.1"
+hyper = {version="1.2.0", features=["http1", "client", "server"]}
+monoio = {version="0.2.3", features=["poll-io", "iouring"]}
+monoio-compat = {version="0.2.2", features=["hyper"]}
+smol_str = "0.2.1"
+tick_counter = "0.4.5"
