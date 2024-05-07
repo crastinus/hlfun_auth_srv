@@ -6,11 +6,22 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.82"
+arrayvec = "0.7.4"
+base64 = "0.22.1"
 bytes = "1.6.0"
+csv = "1.3.0"
+dashmap = "5.5.3"
 http = "1.1.0"
 http-body-util = "0.1.1"
+httparse = "1.8.0"
 hyper = {version="1.2.0", features=["http1", "client", "server"]}
+ipnet = "2.9.0"
+iprange = "0.6.7"
+jwt-simple = {version="0.12.9", default-features=false, features=["pure-rust"]}
 monoio = {version="0.2.3", features=["poll-io", "iouring"]}
 monoio-compat = {version="0.2.2", features=["hyper"]}
-smol_str = "0.2.1"
+serde = {version="1.0.200", features=["derive"]}
+serde_json = "1.0.116"
+smol_str = {version="0.2.1", features=["serde"]}
 tick_counter = "0.4.5"

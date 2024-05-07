@@ -1,6 +1,7 @@
 use std::u8;
 
 use http::Method;
+use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -99,24 +100,27 @@ impl Handler {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub(super) struct AuthRequest<'body_lf> {
-    login: Option<&'body_lf str>,
-    password: Option<&'body_lf str>,
-    nonce: Option<&'body_lf str>,
+    pub(super) login: &'body_lf str,
+    pub(super) password: SmolStr,
+    pub(super) nonce: &'body_lf str,
 }
 
+#[derive(Serialize, Deserialize)]
 pub(super) struct RegisterUserRequest<'body_lf> {
-    login: Option<&'body_lf str>,
-    password: Option<&'body_lf str>,
-    phone: Option<&'body_lf str>,
-    country: Option<&'body_lf str>,
-    name: Option<&'body_lf str>,
+    pub(super) login: &'body_lf str,
+    pub(super) password: SmolStr,
+    pub(super) phone: &'body_lf str,
+    pub(super) country: &'body_lf str,
+    pub(super) name: &'body_lf str,
 }
 
+#[derive(Serialize, Deserialize)]
 pub(super) struct EditUserRequest<'body_lf> {
-    login: Option<&'body_lf str>,
-    password: Option<&'body_lf str>,
-    phone: Option<&'body_lf str>,
+    pub(super) name: Option<&'body_lf str>,
+    pub(super) password: Option<SmolStr>,
+    pub(super) phone: Option<&'body_lf str>,
 }
 
 #[cfg(test)]
