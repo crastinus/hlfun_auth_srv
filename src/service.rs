@@ -63,6 +63,10 @@ impl ConnectionProcessor {
                     return Ok(());
                 };
 
+                if _sz == 0 {
+                    return Ok(());
+                }
+
                 if buf.len() > MAX_HEADER_SIZE {
                     self.write_code(StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE)
                         .await

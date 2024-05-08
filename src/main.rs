@@ -1,9 +1,13 @@
+
+#![feature(thread_local)]
+
 mod request;
 mod response;
 mod service;
 mod sharded_prefix_set;
 mod state;
 mod user;
+mod tl_alloc;
 
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Instant};
 
@@ -19,6 +23,7 @@ where
     A: Into<SocketAddr>,
 {
     let listener = TcpListener::bind(addr.into())?;
+
     loop {
         let (stream, _) = listener.accept().await?;
         monoio::spawn(handle_connection(stream, state.clone()));
@@ -33,6 +38,7 @@ pub async fn handle_connection(stream: TcpStream, state: Arc<State>) {
 }
 
 fn main() {
+    eprintln!("io_uring: {}", monoio::utils::detect_uring());
     let prefixes = std::thread::spawn(|| read_countries());
     let users = read_users();
     let prefixes = prefixes.join().unwrap();
@@ -135,9 +141,9 @@ fn read_countries() -> HashMap<SmolStr, IpRange<ipnet::Ipv4Net>> {
         let cidr = line.next().unwrap();
         let geoname_id = line.next().unwrap();
 
-       // if idx == 2620546 {
-       //   eprintln!("{cidr}: {geoname_id}");
-       // }
+        // if idx == 2620546 {
+        //   eprintln!("{cidr}: {geoname_id}");
+        // }
 
         let Some(country) = geoname_id_by_country.get(geoname_id) else {
             // eprintln!("not found geoname_id: {geoname_id}");
