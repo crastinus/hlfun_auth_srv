@@ -1,15 +1,18 @@
-
-#![feature(thread_local)]
-
-mod request;
-mod response;
 mod service;
 mod sharded_prefix_set;
 mod state;
 mod user;
-mod tl_alloc;
+mod request;
 
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
 
 use dashmap::DashMap;
 use iprange::IpRange;
@@ -18,16 +21,27 @@ use service::ConnectionProcessor;
 use smol_str::SmolStr;
 use state::{State, User};
 
+#[global_allocator]
+static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
+static running: std::sync::atomic::AtomicBool = AtomicBool::new(true);
+
 pub async fn serve_http<A>(addr: A, state: Arc<State>) -> std::io::Result<()>
 where
     A: Into<SocketAddr>,
 {
+    monoio::spawn(async {
+        monoio::time::sleep(Duration::from_secs(60)).await;
+        running.store(false, Ordering::Relaxed);
+    });
     let listener = TcpListener::bind(addr.into())?;
 
-    loop {
+    while running.load(std::sync::atomic::Ordering::Relaxed) {
         let (stream, _) = listener.accept().await?;
         monoio::spawn(handle_connection(stream, state.clone()));
     }
+
+    Ok(())
 }
 
 pub async fn handle_connection(stream: TcpStream, state: Arc<State>) {
@@ -38,12 +52,17 @@ pub async fn handle_connection(stream: TcpStream, state: Arc<State>) {
 }
 
 fn main() {
-    eprintln!("io_uring: {}", monoio::utils::detect_uring());
+    eprintln!(
+        "thp: {:?}",
+        std::fs::read_to_string("/sys/kernel/mm/transparent_hugepage/enabled")
+    );
+    // eprintln!("io_uring: {}", monoio::utils::detect_uring());
     let prefixes = std::thread::spawn(|| read_countries());
     let users = read_users();
     let prefixes = prefixes.join().unwrap();
 
     let state = Arc::new(State::new(users, prefixes));
+    // let state = Arc::new(State::new(DashMap::new(), HashMap::new()));
     let state_cln = state.clone();
     let body = async {
         let _ = serve_http(([0, 0, 0, 0], 8080), state_cln).await;
@@ -55,6 +74,8 @@ fn main() {
             let state_cln = state.clone();
             ::std::thread::spawn(|| {
                 monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+                // monoio::RuntimeBuilder::<monoio::IoUringDriver>::new()
+                    .enable_timer()
                     .build()
                     .expect("Failed building the Runtime")
                     .block_on(async move {
@@ -65,9 +86,14 @@ fn main() {
         .collect();
 
     monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+        .enable_timer()
         .build()
         .expect("Failed building the Runtime")
         .block_on(body);
+
+    //std::thread::sleep(std::time::Duration::from_secs(60));
+
+    // running.store(false, std::sync::atomic::Ordering::Relaxed);
 
     threads.into_iter().for_each(|t| {
         let _ = t.join();
@@ -136,7 +162,7 @@ fn read_countries() -> HashMap<SmolStr, IpRange<ipnet::Ipv4Net>> {
     let mut country_prefixes: HashMap<_, Vec<ipnet::Ipv4Net>> = HashMap::new();
 
     let lines = data.trim().split("\n");
-    for (idx, line) in lines.skip(1).enumerate() {
+    for (_idx, line) in lines.skip(1).enumerate() {
         let mut line = line.split(",");
         let cidr = line.next().unwrap();
         let geoname_id = line.next().unwrap();
@@ -150,7 +176,7 @@ fn read_countries() -> HashMap<SmolStr, IpRange<ipnet::Ipv4Net>> {
             continue;
         };
 
-        let cntr = country.as_str();
+        let _cntr = country.as_str();
         let entry = country_prefixes
             .entry(country.clone())
             .or_insert_with(|| Vec::with_capacity(1000));

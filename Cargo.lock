@@ -124,6 +124,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "branches"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7958fb9748a08a6f46ef773e87c43997a844709bc293b4c3de48135debaf9d2a"
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -436,6 +442,7 @@ dependencies = [
  "anyhow",
  "arrayvec",
  "base64",
+ "branches",
  "bytes",
  "csv",
  "dashmap",
@@ -445,10 +452,10 @@ dependencies = [
  "hyper",
  "ipnet",
  "iprange",
+ "jemallocator",
  "jwt-simple",
  "monoio",
  "monoio-compat",
- "okaoka",
  "serde",
  "serde_json",
  "smol_str",
@@ -839,13 +846,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6a622008b6e321afc04970976f62ee297fdbaa6f95318ca343e3eebb9648441"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "okaoka"
-version = "0.1.0"
-dependencies = [
- "jemallocator",
 ]
 
 [[package]]

@@ -121,6 +121,8 @@ pub(super) struct EditUserRequest<'body_lf> {
     pub(super) name: Option<&'body_lf str>,
     pub(super) password: Option<SmolStr>,
     pub(super) phone: Option<&'body_lf str>,
+    pub(super) is_admin: Option<bool>,
+    pub(super) country: Option<SmolStr>,
 }
 
 #[cfg(test)]

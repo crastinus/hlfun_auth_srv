@@ -5,17 +5,16 @@ use http::{Method, StatusCode};
 use ipnet::Ipv4Net;
 use jwt_simple::token::MAX_HEADER_LENGTH;
 use monoio::{
-    io::{AsyncReadRent, AsyncReadRentExt, AsyncWriteRentExt},
+    io::{AsyncReadRent, AsyncWriteRentExt},
     net::TcpStream,
 };
-use smol_str::SmolStr;
 
 use crate::{
     request::{AuthRequest, EditUserRequest, Handler, RegisterUserRequest},
     state::State,
 };
 
-const INIT_READ_SIZE: usize = 4096;
+const INIT_READ_SIZE: usize = 4096 * 4;
 const MAX_HEADERS: usize = 256;
 const MAX_TOKEN_LEN: usize = 256;
 const MAX_IP_LEN: usize = 16;
@@ -42,10 +41,10 @@ impl ConnectionProcessor {
         let mut buf: Vec<u8> = Vec::with_capacity(INIT_READ_SIZE);
         let mut res;
 
-        let mut ip: Option<ArrayString<MAX_IP_LEN>> = None;
-        let mut token: Option<ArrayString<MAX_TOKEN_LEN>> = None;
-        let mut content_length: Option<usize> = None;
-        let mut handler = None;
+        let mut ip: Option<ArrayString<MAX_IP_LEN>>;
+        let mut token: Option<ArrayString<MAX_TOKEN_LEN>>;
+        let mut content_length: Option<usize>;
+        let mut handler;
 
         loop {
             buf.clear();
@@ -67,12 +66,12 @@ impl ConnectionProcessor {
                     return Ok(());
                 }
 
-                if buf.len() > MAX_HEADER_SIZE {
-                    self.write_code(StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE)
-                        .await
-                        .unwrap();
-                    return Ok(());
-                }
+                // if buf.len() > MAX_HEADER_SIZE {
+                //     self.write_code(StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE)
+                //         .await
+                //         .unwrap();
+                //     return Ok(());
+                // }
 
                 // lightweight parsing http body
                 let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
@@ -93,6 +92,14 @@ impl ConnectionProcessor {
                 let method = Method::from_str(req.method.unwrap_or_default()).unwrap_or_default();
 
                 handler = Handler::new(&method, req.path.unwrap_or_default());
+
+                if header_len > MAX_HEADER_LENGTH {
+                    self.write_code(StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE)
+                        .await
+                        .unwrap();
+
+                    return Ok(());
+                }
 
                 for header in req.headers {
                     let name = StackLowerCaseStr::from_str(header.name);
@@ -179,7 +186,8 @@ impl ConnectionProcessor {
 
             if let Handler::Auth = handler {
                 let Ok(request) = serde_json::from_slice::<AuthRequest<'_>>(body) else {
-                    self.write_bad_request().await.unwrap();
+                    self.write_code(StatusCode::FORBIDDEN).await.unwrap();
+                    // self.write_bad_request().await.unwrap();
                     continue;
                 };
 
@@ -231,7 +239,9 @@ impl ConnectionProcessor {
             let token = &tok[..];
 
             let Some(login) = self.state.get_user_login(token) else {
-                self.write_bad_request().await.unwrap();
+                //
+                //[self.write_bad_request().await.unwrap();
+                self.write_code(StatusCode::FORBIDDEN).await.unwrap();
                 continue;
             };
 
@@ -264,10 +274,14 @@ impl ConnectionProcessor {
                         continue;
                     };
 
-                    if let None =
-                        self.state
-                            .edit_user(login, request.name, request.password, request.phone)
-                    {
+                    if let None = self.state.edit_user(
+                        login,
+                        request.name,
+                        request.password,
+                        request.phone,
+                        request.is_admin,
+                        request.country,
+                    ) {
                         self.write_code(StatusCode::FORBIDDEN).await.unwrap();
                         continue;
                     }
@@ -323,7 +337,7 @@ impl ConnectionProcessor {
                         continue;
                     };
 
-                    if self.state.ban_subnet(ip,mask) {
+                    if self.state.ban_subnet(ip, mask) {
                         self.write_code(StatusCode::CREATED).await.unwrap();
                     } else {
                         self.write_code(StatusCode::CONFLICT).await.unwrap();
@@ -379,7 +393,7 @@ impl ConnectionProcessor {
         Ok(())
     }
 
-    async fn write_auth_token(&mut self, code: StatusCode, body: SmolStr) -> Result<(), CPError> {
+    async fn write_auth_token(&mut self, code: StatusCode, body: String) -> Result<(), CPError> {
         let answer = format!(
             "HTTP/1.1 {} {}\r\nServer: Huyak-huyak\r\nContent-type: application/json\r\nConnection: keep-alive\r\nContent-Length: {}\r\n\r\n\"{}\"",
             code.as_u16(),

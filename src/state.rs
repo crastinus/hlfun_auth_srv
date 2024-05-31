@@ -1,7 +1,6 @@
-use std::{collections::HashMap, net::Ipv4Addr, sync::RwLock};
+use std::{collections::HashMap, net::Ipv4Addr};
 
 use dashmap::{DashMap, DashSet};
-use http::StatusCode;
 use ipnet::Ipv4Net;
 use iprange::IpRange;
 use jwt_simple::{
@@ -9,9 +8,7 @@ use jwt_simple::{
     reexports::coarsetime::Duration,
 };
 use serde::{Deserialize, Serialize};
-use smol_str::{SmolStr, ToSmolStr};
-
-use crate::sharded_prefix_set::ShardedPrefixSet;
+use smol_str::SmolStr;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
@@ -88,7 +85,7 @@ impl State {
         password: &str,
         nonce: &str,
         ip: Ipv4Addr,
-    ) -> Option<SmolStr> {
+    ) -> Option<String> {
         // self.check_user_baned(login)?;
         let (login, nonce, country) = {
             let mut user = self.users.get_mut(login)?;
@@ -119,7 +116,6 @@ impl State {
         cus.expires_at = None;
 
         let token = self.key.authenticate(cus).ok()?;
-        let token: SmolStr = token.into();
 
         Some(token)
     }
@@ -199,21 +195,37 @@ impl State {
         name: Option<&str>,
         password: Option<SmolStr>,
         phone: Option<&str>,
+        is_admin: Option<bool>,
+        country: Option<SmolStr>,
     ) -> Option<()> {
         let mut usr = self.users.get_mut(&login).unwrap();
+
         if usr.is_banned {
             return None;
+        }
+
+        if let Some(is_admin) = is_admin {
+            if usr.is_admin {
+                usr.is_admin = is_admin;
+            }
+        }
+
+        if let Some(country) = country {
+            usr.country = country;
         }
 
         if let Some(pass) = password {
             usr.password = pass;
         }
+
         if let Some(name) = name {
             usr.name = name.into();
         }
+
         if let Some(phone) = phone {
             usr.phone = phone.into();
         }
+
         Some(())
     }
 
@@ -253,11 +265,11 @@ impl State {
             }
         }
 
-        for subnet in self.root_banned_subnets.iter() {
-            if subnet.contains(&ip) {
-                return true;
-            }
-        }
+        // for subnet in self.root_banned_subnets.iter() {
+        //     if subnet.contains(&ip) {
+        //         return true;
+        //     }
+        // }
 
         false
     }
@@ -266,14 +278,14 @@ impl State {
         let fb = network.octets()[0];
         let subnet = Ipv4Net::new(network, mask).unwrap();
 
-        if mask < 8 {
-            if self.root_banned_subnets.contains(&subnet) {
-                return false;
-            }
+        // if mask < 8 {
+        //     if self.root_banned_subnets.contains(&subnet) {
+        //         return false;
+        //     }
 
-            self.root_banned_subnets.insert(subnet);
-            true
-        } else {
+        //     self.root_banned_subnets.insert(subnet);
+        //     true
+        // } else {
             let mut fb = self.first_byte_banned_subnets.entry(fb).or_default();
             for &stored_subnet in fb.value().iter() {
                 if stored_subnet == subnet {
@@ -282,7 +294,7 @@ impl State {
             }
             fb.push(subnet);
             true
-        }
+        // }
 
         // if self.first_byte_banned_subnets.contains(&subnet) {
         //     return false;
@@ -304,41 +316,26 @@ impl State {
             self.root_banned_subnets.remove(&subnet);
             true
         } else {
-            let Some(mut subnets) = self.first_byte_banned_subnets.get_mut(&fb) else {
-                return false;
+            let retain: bool = {
+                let Some(mut subnets) = self.first_byte_banned_subnets.get_mut(&fb) else {
+                    return false;
+                };
+
+                match subnets.iter().position(|&snet| snet == subnet) {
+                    Some(idx) => {
+                        subnets.remove(idx);
+                        true
+                    }
+
+                    None => return false,
+                }
             };
 
-            match subnets.iter().position(|&snet| snet == subnet) {
-                Some(idx) => {
-                    subnets.remove(idx);
-                    true
-                }
-
-                None => return false,
+            if retain {
+                self.first_byte_banned_subnets.retain(|_k, v| !v.is_empty());
             }
+
+            true
         }
     }
-
-    // pub fn ban_subnet(&self, subnet: Ipv4Addr, mask: u8) -> bool {
-    //     let fb = network.octets()[0];
-    //     let subnet = Ipv4Net::new(network, mask).unwrap();
-
-    //     if mask < 8 {
-    //         if self.root_banned_subnets.contains(&subnet) {
-    //             return false;
-    //         }
-
-    //         self.root_banned_subnets.insert(subnet);
-    //         true
-    //     } else {
-    //     }
-
-    //     // if self.first_byte_banned_subnets.contains(&subnet) {
-    //     //     return false;
-    //     // }
-
-    //     // self.first_byte_banned_subnets.insert(subnet);
-
-    //     true
-    // }
 }
